@@ -143,6 +143,11 @@ export async function createWorkspace(
   const sessionDir = path.resolve(config.workspace.root, slug);
   fs.mkdirSync(sessionDir, { recursive: true });
 
+  // Prune stale worktree references before creating new ones
+  for (const [, repo] of Object.entries(config.repos)) {
+    await exec("git", ["-C", repo.path, "worktree", "prune"]);
+  }
+
   const paths: Record<string, string> = {};
   const created: Array<{ repoPath: string; worktreePath: string }> = [];
 
