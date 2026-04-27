@@ -16,7 +16,7 @@ import {
 } from "../src/adapters/index.js";
 import { ClickUpAdapter } from "../src/adapters/clickup.js";
 import { HeadlessAdapter } from "../src/adapters/headless.js";
-import { createWorkspace } from "../src/workspace.js";
+import { createWorkspace, type ExecFn } from "../src/workspace.js";
 import { renderPrompt } from "../src/prompt.js";
 import {
   registerCreateMrTool,
@@ -30,6 +30,11 @@ export default function (pi: ExtensionAPI) {
   let pendingSystemPrompt: string | null = null;
 
   const getState = () => state;
+
+  // Wrap pi.exec to match ExecFn signature
+  const exec: ExecFn = async (command, args, options) => {
+    return pi.exec(command, args, options);
+  };
 
   // ── Register tools ─────────────────────────────────────────────
   registerCreateMrTool(pi, getState);
@@ -94,6 +99,7 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("Creating workspace...", "info");
         const workspacePaths = await createWorkspace(
           config,
+          exec,
           parsed.isHeadless ? undefined : bug.id,
           bug.title,
         );
