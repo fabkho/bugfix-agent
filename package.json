@@ -1,0 +1,17 @@
+{
+  "name": "bugfix-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-repo bugfix agent for pi — fetches issues, analyzes codebases, fixes bugs, creates MRs",
+  "pi": {
+    "extensions": ["./extension/index.ts"]
+  },
+  "dependencies": {
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "@types/node": "^22.0.0"
+  }
+}
