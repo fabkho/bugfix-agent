@@ -1,0 +1,27 @@
+name: anny
+issueTracker:
+  type: clickup
+  tokenEnv: CLICKUP_API_TOKEN
+repos:
+  frontend:
+    path: ~/code/anny/anny-ui
+    remote: origin
+    baseBranch: main
+    platform: gitlab
+    contextFiles:
+      - .github/copilot-instructions.md
+  backend:
+    path: ~/code/anny/bookings-api
+    remote: origin
+    baseBranch: main
+    platform: gitlab
+    contextFiles:
+      - .github/copilot-instructions.md
+      - AGENTS.md
+workspace:
+  root: ~/code/anny/worktrees
+  script: ~/bin/create-workspace.sh
+agent:
+  model: claude-opus-4.6
+  thinking: high
+  scoutModel: claude-sonnet-4.6
