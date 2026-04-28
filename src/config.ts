@@ -29,7 +29,19 @@ export interface AgentConfig {
 
 export interface IssueTrackerConfig {
   type: "clickup" | "headless";
+  /** Adapter-specific config — keyed by type name */
+  [adapterType: string]: unknown;
+}
+
+/** ClickUp-specific config */
+export interface ClickUpTrackerConfig {
+  tokenEnv?: string;  // default: CLICKUP_API_TOKEN
+}
+
+/** Linear-specific config (future) */
+export interface LinearTrackerConfig {
   tokenEnv?: string;
+  teamId?: string;
 }
 
 export interface ProjectConfig {
@@ -181,9 +193,17 @@ export function resolveConfig(projectName?: string): ResolvedConfig {
   // ── Issue tracker ───────────────────────────────────────────────
 
   const rawTracker = (parsed.issueTracker ?? parsed.issue_tracker ?? {}) as Record<string, unknown>;
+  const trackerType = (rawTracker.type as string) ?? "headless";
   const issueTracker: IssueTrackerConfig = {
-    type: (rawTracker.type as "clickup" | "headless") ?? "headless",
-    tokenEnv: rawTracker.tokenEnv as string | undefined,
+    type: trackerType as "clickup" | "headless",
+    // Pass through the adapter-specific sub-object
+    ...(rawTracker[trackerType] && typeof rawTracker[trackerType] === "object"
+      ? { [trackerType]: rawTracker[trackerType] }
+      : {}),
+    // Backwards compat: top-level tokenEnv → clickup.tokenEnv
+    ...(trackerType === "clickup" && rawTracker.tokenEnv && !rawTracker.clickup
+      ? { clickup: { tokenEnv: rawTracker.tokenEnv } }
+      : {}),
   };
 
   // ── Workspace ───────────────────────────────────────────────────

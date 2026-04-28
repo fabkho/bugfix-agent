@@ -98,42 +98,73 @@ Merges all MR(s) created in the session, updates ClickUp status to "code review"
 
 ## Project Config
 
-YAML config files live at `~/.config/bugfix-agent/<name>.yaml`:
+YAML config files live at `~/.config/bugfix-agent/<name>.yaml`.
+
+### Minimal config (defaults handle the rest)
+
+```yaml
+name: my-project
+
+repos:
+  frontend:
+    path: ~/code/my-project/frontend
+  backend:
+    path: ~/code/my-project/backend
+
+workspace:
+  root: ~/code/my-project/worktrees
+```
+
+### Full config with all options
 
 ```yaml
 name: my-project
 
 issueTracker:
-  type: clickup              # clickup | headless
-  tokenEnv: CLICKUP_API_TOKEN
+  type: clickup                       # clickup | headless (default: headless)
+  clickup:                            # adapter-specific config nested under type name
+    tokenEnv: CLICKUP_API_TOKEN       # env var holding the API token
+  # linear:                           # future: Linear adapter config
+  #   tokenEnv: LINEAR_API_KEY
+  #   teamId: TEAM_123
 
 repos:
   frontend:
-    path: ~/code/my-project/frontend
-    remote: origin
-    baseBranch: main
-    platform: gitlab          # gitlab | github
-    contextFiles:
-      - .github/copilot-instructions.md
-  backend:
-    path: ~/code/my-project/backend
-    remote: origin
-    baseBranch: main
-    platform: gitlab
-    contextFiles:
+    path: ~/code/my-project/frontend  # required — path to the repo
+    remote: origin                    # default: origin
+    baseBranch: main                  # default: main
+    platform: gitlab                  # gitlab | github (default: gitlab)
+    contextFiles:                     # files read into the agent's system prompt
       - .github/copilot-instructions.md
       - AGENTS.md
+  backend:
+    path: ~/code/my-project/backend
+    contextFiles:
+      - .github/copilot-instructions.md
 
 workspace:
-  root: ~/code/my-project/worktrees
-  # script: ~/bin/create-workspace.sh  # optional custom script
+  root: ~/code/my-project/worktrees   # where worktrees are created
+  # script: ~/bin/create-workspace.sh # optional custom creation script
 
 agent:
-  model: claude-opus-4.6
-  thinking: high
-  scoutModel: claude-sonnet-4.6
-  # promptTemplate: ~/custom-prompt.md  # optional override
+  model: claude-opus-4.6              # default: claude-opus-4.6
+  thinking: high                      # default: high
+  scoutModel: claude-sonnet-4.6       # default: claude-sonnet-4.6
+  # promptTemplate: ~/custom-prompt.md # override the default system prompt
 ```
+
+### Defaults
+
+| Field | Default |
+|-------|---------|
+| `issueTracker.type` | `headless` |
+| `repos.*.remote` | `origin` |
+| `repos.*.baseBranch` | `main` |
+| `repos.*.platform` | `gitlab` |
+| `workspace.root` | `~/worktrees` |
+| `agent.model` | `claude-opus-4.6` |
+| `agent.thinking` | `high` |
+| `agent.scoutModel` | `claude-sonnet-4.6` |
 
 ### Config resolution order
 
@@ -160,6 +191,89 @@ Adding new adapters (GitHub Issues, Linear, Jira) means implementing the `IssueA
 |------|-------------|
 | `create_mr` | Commit + push + open MR/PR for a repo |
 | `update_issue` | Post a comment or update status on the issue tracker |
+
+## Default System Prompt
+
+The agent receives this system prompt (with variables substituted) for each bugfix session. Override it per-project via `agent.promptTemplate` in the config.
+
+<details>
+<summary>Click to expand the default prompt template</summary>
+
+```markdown
+# Bugfix Agent — {{project.name}}
+
+## Your Role
+
+You are an automated bugfix agent working across multiple repositories. Your job is to analyze a bug report, identify the root cause across all repos, implement the fix, and create merge requests.
+
+## Workspace Layout
+
+{{repos_overview}}
+
+## Bug Report
+
+**ID:** {{bug.id}}
+**Title:** {{bug.title}}
+**URL:** {{bug.url}}
+
+### Description
+
+{{bug.description}}
+
+### Comments
+
+{{bug.comments}}
+
+{{#if repo_hint}}
+## Repo Hint
+
+{{repo_hint}}
+{{/if}}
+
+{{#if extra_context}}
+## Additional Context
+
+{{extra_context}}
+{{/if}}
+
+## Codebase Conventions
+
+{{repos_context}}
+
+## Workflow
+
+1. **Analyze**: Read the bug report carefully. Use the `Agent` tool with `subagent_type: "Explore"` to scout relevant code across repos if needed. Keep your own context focused on the fix.
+2. **Plan**: Determine which repo(s) need changes. State your plan before coding.
+3. **Fix**: Make the minimal fix. Don't refactor unrelated code. Use absolute paths for all file operations.
+4. **Verify**: Run linters and tests if available in the repo.
+5. **Commit & MR**: Use the `create_mr` tool for each repo that has changes. Include the bug tracker URL in MR descriptions.
+6. **Update tracker**: Use the `update_issue` tool to post MR links back to the issue tracker.
+
+## Rules
+
+- Use **ABSOLUTE PATHS** for all file operations (read, edit, write, bash cd)
+- Make minimal changes — fix the bug, don't refactor
+- If a fix spans multiple repos, note deployment order in MR descriptions
+- Always include the bug tracker URL in MR descriptions
+- Branch naming is handled by the workspace — just commit and use `create_mr`
+- If you are unsure about something, investigate before making changes
+
+## Scout Subagents
+
+Use the `Agent` tool to delegate research tasks:
+
+    Agent({ subagent_type: "Explore", prompt: "Find all usages of X in <path>", description: "Find X usages" })
+
+Use scouts for:
+- Broad searches across large codebases
+- Understanding unfamiliar code or dependencies
+- Reading and summarizing large files
+- Tracing call chains across repos
+
+Keep your own context lean — delegate exploration, retain only the findings you need.
+```
+
+</details>
 
 ## License
 

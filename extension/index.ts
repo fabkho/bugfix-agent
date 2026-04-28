@@ -87,9 +87,7 @@ export default function (pi: ExtensionAPI) {
           adapter = new HeadlessAdapter();
           bug = await adapter.fetchIssue(parsed.taskRef);
         } else {
-          adapter = createAdapter(config.issueTracker.type, {
-            tokenEnv: config.issueTracker.tokenEnv,
-          });
+          adapter = createAdapter(config.issueTracker);
           ctx.ui.notify(`Fetching issue ${parsed.taskRef}...`, "info");
           bug = await adapter.fetchIssue(parsed.taskRef);
           ctx.ui.notify(`Bug: ${bug.title}`, "info");
