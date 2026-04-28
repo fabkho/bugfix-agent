@@ -12,7 +12,7 @@ A [pi](https://github.com/badlogic/pi-mono) extension for fixing bugs across mul
 - **MR/PR creation** — `create_mr` tool pushes and opens merge requests via `glab` (GitLab) or `gh` (GitHub)
 - **Scout subagents** — delegates research to cheaper/faster models via [@tintinweb/pi-subagents](https://github.com/tintinweb/pi-subagents)
 - **Project configs** — YAML-based per-project configuration, reusable across different multi-repo setups
-- **Session persistence** — bugfix state survives reloads and session resume
+- **Session persistence** — multifix state survives reloads and session resume
 - **Status line** — footer shows active bug + MR count
 
 ## Install
@@ -54,24 +54,24 @@ ln -sf "$(npm root -g)/pi-multifix/agents/bugfix-scout.md" ~/.pi/agent/agents/bu
 ### Fix a bug
 
 ```
-/bugfix CU-12345                                          # ClickUp task ID
-/bugfix CU-12345 repo=frontend                            # hint which repo is affected
-/bugfix CU-12345 repo=backend "The API returns 500"       # with extra context
-/bugfix https://app.clickup.com/t/86abc123                # ClickUp URL
-/bugfix "The booking modal crashes on save"                # headless mode (no tracker)
-/bugfix --project other-project CU-99999                   # different project config
+/multifix CU-12345                                          # ClickUp task ID
+/multifix CU-12345 repo=frontend                            # hint which repo is affected
+/multifix CU-12345 repo=backend "The API returns 500"       # with extra context
+/multifix https://app.clickup.com/t/86abc123                # ClickUp URL
+/multifix "The booking modal crashes on save"                # headless mode (no tracker)
+/multifix --project other-project CU-99999                   # different project config
 ```
 
 ### Merge and close
 
 ```
-/bugfix-done                                              # merge MR(s), update tracker
-/bugfix-done "Simple i18n fix, no backend changes needed"  # with a comment
+/multifix-done                                              # merge MR(s), update tracker
+/multifix-done "Simple i18n fix, no backend changes needed"  # with a comment
 ```
 
 Merges all MR(s) created in the session, updates issue tracker status (if `doneStatus` configured), and optionally posts your comment.
 
-## What happens when you run `/bugfix`
+## What happens when you run `/multifix`
 
 1. **Loads project config** from `~/.config/pi-multifix/<project>.yaml`
 2. **Fetches the bug** from ClickUp (or creates a headless bug from your text)
@@ -109,7 +109,7 @@ name: my-project
 
 issueTracker:
   type: clickup                       # clickup | headless (default: headless)
-  doneStatus: code review             # status set by /bugfix-done (default: skip)
+  doneStatus: code review             # status set by /multifix-done (default: skip)
   branchPrefix: CU-                   # auto-set per tracker type, override here
   clickup:                            # adapter-specific config nested under type name
     tokenEnv: CLICKUP_API_TOKEN       # env var holding the API token
@@ -185,7 +185,7 @@ Adding new adapters (GitHub Issues, Linear, Jira) means implementing the `IssueA
 
 ## Default System Prompt
 
-The agent receives this system prompt (with variables substituted) for each bugfix session. Override it per-project via `agent.promptTemplate` in the config.
+The agent receives this system prompt (with variables substituted) for each multifix session. Override it per-project via `agent.promptTemplate` in the config.
 
 <details>
 <summary>Click to expand the default prompt template</summary>
@@ -195,7 +195,7 @@ The agent receives this system prompt (with variables substituted) for each bugf
 
 ## Your Role
 
-You are an automated bugfix agent working across multiple repositories. Your job is to analyze a bug report, identify the root cause across all repos, implement the fix, and create merge requests.
+You are an automated multifix agent working across multiple repositories. Your job is to analyze a bug report, identify the root cause across all repos, implement the fix, and create merge requests.
 
 ## Workspace Layout
 

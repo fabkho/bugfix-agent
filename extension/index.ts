@@ -1,9 +1,9 @@
 /**
- * pi-multifix — Pi extension for multi-repo bugfixing.
+ * pi-multifix — Pi extension for multi-repo fixing.
  *
  * Registers:
- *   /bugfix <task-id|text> [repo=<name>] [--project <name>] [extra context...]
- *   /bugfix-done [comment] — merge MRs, update tracker
+ *   /multifix <task-id|text> [repo=<name>] [--project <name>] [extra context...]
+ *   /multifix-done [comment] — merge MRs, update tracker
  *   create_mr tool
  *   update_issue tool
  */
@@ -97,7 +97,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async (_event, ctx) => {
     state = null;
     if (ctx.hasUI) {
-      ctx.ui.setStatus("bugfix", undefined);
+      ctx.ui.setStatus("multifix", undefined);
     }
   });
 
@@ -129,7 +129,7 @@ export default function (pi: ExtensionAPI) {
       : "";
 
     ctx.ui.setStatus(
-      "bugfix",
+      "multifix",
       theme.fg("accent", "🔧 ") +
       theme.fg("dim", bugLabel) +
       theme.fg("muted", ` | ${repos}`) +
@@ -151,18 +151,18 @@ export default function (pi: ExtensionAPI) {
     pi.appendEntry("bugfix-state", persisted);
   }
 
-  // ── /bugfix command ────────────────────────────────────────────
-  pi.registerCommand("bugfix", {
+  // ── /multifix command ────────────────────────────────────────────
+  pi.registerCommand("multifix", {
     description:
       "Fix a bug across repos. Usage:\n" +
-      "  /bugfix CU-12345\n" +
-      "  /bugfix CU-12345 repo=frontend \"Extra context\"\n" +
-      '  /bugfix "The booking modal crashes on save"\n' +
-      "  /bugfix --project other CU-99999",
+      "  /multifix CU-12345\n" +
+      "  /multifix CU-12345 repo=frontend \"Extra context\"\n" +
+      '  /multifix "The booking modal crashes on save"\n' +
+      "  /multifix --project other CU-99999",
     handler: async (args, ctx) => {
       if (!args?.trim()) {
         ctx.ui.notify(
-          "Usage: /bugfix <task-id|URL|text> [repo=<name>] [--project <name>] [context...]",
+          "Usage: /multifix <task-id|URL|text> [repo=<name>] [--project <name>] [context...]",
           "warning",
         );
         return;
@@ -244,20 +244,20 @@ export default function (pi: ExtensionAPI) {
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        ctx.ui.notify(`/bugfix error: ${msg}`, "error");
+        ctx.ui.notify(`/multifix error: ${msg}`, "error");
       }
     },
   });
 
-  // ── /bugfix-done command ───────────────────────────────────────
-  pi.registerCommand("bugfix-done", {
+  // ── /multifix-done command ───────────────────────────────────────
+  pi.registerCommand("multifix-done", {
     description:
       "Merge MR(s), update issue tracker, and optionally leave a comment.\n" +
-      "  /bugfix-done\n" +
-      '  /bugfix-done "Went with the simple fix, no backend needed"',
+      "  /multifix-done\n" +
+      '  /multifix-done "Went with the simple fix, no backend needed"',
     handler: async (args, ctx) => {
       if (!state) {
-        ctx.ui.notify("No active bugfix session. Run /bugfix first.", "error");
+        ctx.ui.notify("No active multifix session. Run /multifix first.", "error");
         return;
       }
 
@@ -359,7 +359,7 @@ export default function (pi: ExtensionAPI) {
       // ── Update status line ─────────────────────────────────────
       if (ctx.hasUI) {
         const theme = ctx.ui.theme;
-        ctx.ui.setStatus("bugfix", theme.fg("success", "✓ ") + theme.fg("dim", "bugfix done"));
+        ctx.ui.setStatus("multifix", theme.fg("success", "✓ ") + theme.fg("dim", "multifix done"));
       }
 
       ctx.ui.notify(results.join("\n"), "info");

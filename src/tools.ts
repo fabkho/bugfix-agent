@@ -46,7 +46,7 @@ export function registerCreateMrTool(
     async execute(toolCallId, params, signal) {
       const state = getState();
       if (!state) {
-        throw new Error("Bugfix session not active — run /bugfix first");
+        throw new Error("Multifix session not active — run /multifix first");
       }
 
       const { config, bug, workspacePaths } = state;
@@ -252,7 +252,7 @@ export function registerUpdateIssueTool(
     async execute(toolCallId, params) {
       const state = getState();
       if (!state) {
-        throw new Error("Bugfix session not active — run /bugfix first");
+        throw new Error("Multifix session not active — run /multifix first");
       }
 
       const { bug, adapter } = state;
