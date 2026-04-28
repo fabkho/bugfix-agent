@@ -67,8 +67,8 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     state = null;
 
-    // Scan session entries for persisted bugfix state
-    for (const entry of ctx.sessionManager.getEntries()) {
+    // Scan current branch entries for persisted bugfix state
+    for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "custom" && entry.customType === "bugfix-state") {
         try {
           const persisted = entry.data as PersistedState;
@@ -93,6 +93,14 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
+  // ── Cleanup on session shutdown ────────────────────────────────
+  pi.on("session_shutdown", async (_event, ctx) => {
+    state = null;
+    if (ctx.hasUI) {
+      ctx.ui.setStatus("bugfix", undefined);
+    }
+  });
+
   // ── Inject system prompt on next agent turn ────────────────────
   pi.on("before_agent_start", async (event, _ctx) => {
     if (!pendingSystemPrompt) return;
@@ -110,7 +118,7 @@ export default function (pi: ExtensionAPI) {
     if (!ctx.hasUI || !state) return;
     const theme = ctx.ui.theme;
 
-    const bugLabel = state.bug.id !== "headless"
+    const bugLabel = !state.bug.id.startsWith("headless")
       ? `${state.bug.id}`
       : "headless";
 
@@ -201,7 +209,7 @@ export default function (pi: ExtensionAPI) {
         state = { config, bug, adapter, workspacePaths, createdMrs: {} };
 
         // ── 5. Name the session + status line ────────────────────
-        const sessionLabel = bug.id !== "headless"
+        const sessionLabel = !bug.id.startsWith("headless")
           ? `${bug.id}: ${bug.title.slice(0, 60)}`
           : bug.title.slice(0, 60);
         pi.setSessionName(`🔧 ${sessionLabel}`);

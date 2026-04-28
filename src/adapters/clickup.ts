@@ -1,49 +1,20 @@
-import { execSync } from 'node:child_process'
 import type { Bug, IssueAdapter } from './types.js'
 
 const CLICKUP_API_BASE = 'https://api.clickup.com/api/v2'
 
 export class ClickUpAdapter implements IssueAdapter {
-  private tokenEnv: string
-  private cachedToken: string | null = null
+  private token: string
 
   constructor(tokenEnv: string = 'CLICKUP_API_TOKEN') {
-    this.tokenEnv = tokenEnv
-  }
-
-  /**
-   * Resolve the API token lazily. Tries:
-   * 1. process.env (current pi process)
-   * 2. Shell eval (sources ~/.zshenv / ~/.zshrc to pick up tokens set after pi launched)
-   */
-  private getToken(): string {
-    if (this.cachedToken) return this.cachedToken
-
-    // Try current process env first
-    let token = process.env[this.tokenEnv]
-
-    // Fall back to sourcing the shell env
-    if (!token) {
-      try {
-        token = execSync(
-          `bash -lc 'echo "\${${this.tokenEnv}}"'`,
-          { encoding: 'utf-8', timeout: 3000 },
-        ).trim()
-      } catch {
-        // ignore shell errors
-      }
-    }
-
+    const token = process.env[tokenEnv]
     if (!token) {
       throw new Error(
-        `Missing ClickUp API token: environment variable "${this.tokenEnv}" is not set.\n` +
-        `Add it to ~/.zshenv:  export ${this.tokenEnv}=pk_YOUR_TOKEN\n` +
+        `Missing ClickUp API token: environment variable "${tokenEnv}" is not set.\n` +
+        `Add it to ~/.zshenv:  export ${tokenEnv}=pk_YOUR_TOKEN\n` +
         `Then restart your terminal and pi.`,
       )
     }
-
-    this.cachedToken = token
-    return token
+    this.token = token
   }
 
   private async clickupFetch(
@@ -54,7 +25,7 @@ export class ClickUpAdapter implements IssueAdapter {
     const res = await fetch(`${CLICKUP_API_BASE}${endpoint}`, {
       method,
       headers: {
-        Authorization: this.getToken(),
+        Authorization: this.token,
         'Content-Type': 'application/json',
       },
       ...(body ? { body: JSON.stringify(body) } : {}),

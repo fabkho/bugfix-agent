@@ -110,9 +110,11 @@ export async function createWorkspace(
       throw new Error(`Workspace script not found: ${script}`);
     }
 
-    const scriptArg = taskId
-      ? `CU-${taskId}_${slugify(title || "bugfix")}`
-      : slugify(title || `bugfix-${Date.now()}`);
+    const scriptArg = taskId && branchPrefix
+      ? `${branchPrefix}${taskId}_${slugify(title || "bugfix")}`
+      : taskId
+        ? `${taskId}_${slugify(title || "bugfix")}`
+        : slugify(title || `bugfix-${Date.now()}`);
 
     const result = await exec(script, [scriptArg], { timeout: 30000 });
     if (result.code !== 0) {
