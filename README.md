@@ -152,7 +152,7 @@ Each repo can specify `contextFiles` — paths relative to the repo root (e.g., 
 | `clickup` | Task ID, CU-prefix, or URL | Fetches from ClickUp API, posts comments, updates status |
 | `headless` | Quoted free text | No tracker — just a description. `addComment`/`updateStatus` are no-ops |
 
-Adding new adapters (GitHub Issues, Linear, Jira) means implementing the `IssueAdapter` interface in `src/adapters/`.
+Adding new adapters (GitHub Issues, Linear, Jira) means implementing the `IssueAdapter` interface in `src/adapters/`. PRs for additional tracker integrations are welcome!
 
 ## Tools registered
 
