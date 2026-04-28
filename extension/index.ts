@@ -323,7 +323,12 @@ export default function (pi: ExtensionAPI) {
             if (mergeResult.code === 0) {
               results.push(`${repoKey}: ✓ Merged ${mrUrl}`);
             } else {
-              results.push(`${repoKey}: ✗ Merge failed — ${mergeResult.stderr || mergeResult.stdout}`);
+              const errMsg = (mergeResult.stderr + " " + mergeResult.stdout).toLowerCase();
+              if (errMsg.includes("401") || errMsg.includes("403") || errMsg.includes("forbidden") || errMsg.includes("not allowed") || errMsg.includes("unauthorized")) {
+                results.push(`${repoKey}: ⚠ No merge rights — skipped (${mrUrl})`);
+              } else {
+                results.push(`${repoKey}: ✗ Merge failed — ${mergeResult.stderr || mergeResult.stdout}`);
+              }
             }
           } else {
             const prMatch = mrUrl.match(/pull\/(\d+)/);
@@ -340,7 +345,12 @@ export default function (pi: ExtensionAPI) {
             if (mergeResult.code === 0) {
               results.push(`${repoKey}: ✓ Merged ${mrUrl}`);
             } else {
-              results.push(`${repoKey}: ✗ Merge failed — ${mergeResult.stderr || mergeResult.stdout}`);
+              const errMsg = (mergeResult.stderr + " " + mergeResult.stdout).toLowerCase();
+              if (errMsg.includes("403") || errMsg.includes("forbidden") || errMsg.includes("not allowed") || errMsg.includes("unauthorized")) {
+                results.push(`${repoKey}: ⚠ No merge rights — skipped (${mrUrl})`);
+              } else {
+                results.push(`${repoKey}: ✗ Merge failed — ${mergeResult.stderr || mergeResult.stdout}`);
+              }
             }
           }
         } catch (err) {
@@ -375,10 +385,14 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // ── Update status line when MRs are created ────────────────────
+  // ── Update state when MRs are created ───────────────────────────
   pi.on("tool_result", async (event, ctx) => {
     if (event.toolName === "create_mr" && state) {
-      // State was already updated by the tool — just refresh UI + persist
+      // Extract MR URL from the tool result details (more reliable than shared state mutation)
+      const details = event.details as { repo?: string; url?: string; skipped?: boolean } | undefined;
+      if (details?.repo && details?.url && !details?.skipped) {
+        state.createdMrs[details.repo] = details.url;
+      }
       updateStatusLine(ctx);
       persistState();
     }
