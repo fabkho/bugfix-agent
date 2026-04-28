@@ -23,12 +23,15 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export function buildBranchSlug(taskId?: string, title?: string): string {
+export function buildBranchSlug(taskId?: string, title?: string, branchPrefix?: string): string {
   if (taskId) {
     const slug = slugify(title || "bugfix");
-    // Branch must START with CU-<id> to trigger ClickUp automations
-    const normalizedId = taskId.startsWith("CU-") ? taskId : `CU-${taskId}`;
-    return `${normalizedId}_${slug}`;
+    if (branchPrefix) {
+      // Ensure the ID has the prefix (e.g., CU-abc123)
+      const prefixedId = taskId.startsWith(branchPrefix) ? taskId : `${branchPrefix}${taskId}`;
+      return `${prefixedId}_${slug}`;
+    }
+    return `fix/${taskId}_${slug}`;
   }
   const slug = slugify(title || `bugfix-${Date.now()}`);
   return `fix/${slug}`;
@@ -86,16 +89,17 @@ export async function createWorkspace(
   taskId?: string,
   title?: string,
 ): Promise<Record<string, string>> {
-  const branchSlug = buildBranchSlug(taskId, title);
+  const branchPrefix = config.issueTracker.branchPrefix;
+  const branchSlug = buildBranchSlug(taskId, title, branchPrefix);
   const slug = branchSlug.replace(/^fix\//, "");
 
   // ── Check for existing workspace ────────────────────────────────
   const existing = detectExistingWorkspace(config, branchSlug);
   if (existing) return existing;
 
-  if (taskId) {
-    const cuSlug = `CU-${taskId}_${slugify(title || "bugfix")}`;
-    const existing2 = detectExistingWorkspace(config, cuSlug);
+  if (taskId && branchPrefix) {
+    const prefixedSlug = `${branchPrefix}${taskId}_${slugify(title || "bugfix")}`;
+    const existing2 = detectExistingWorkspace(config, prefixedSlug);
     if (existing2) return existing2;
   }
 

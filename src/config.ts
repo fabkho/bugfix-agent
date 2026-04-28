@@ -29,6 +29,8 @@ export interface AgentConfig {
 
 export interface IssueTrackerConfig {
   type: "clickup" | "headless";
+  /** Prefix for branch names (e.g., "CU-" for ClickUp, "LIN-" for Linear). Default: none */
+  branchPrefix?: string;
   /** Adapter-specific config — keyed by type name */
   [adapterType: string]: unknown;
 }
@@ -63,6 +65,13 @@ export interface ResolvedConfig extends Omit<ProjectConfig, "repos"> {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const CONFIG_DIR = join(homedir(), ".config", "bugfix-agent");
+
+/** Default branch prefixes per tracker type (for automation triggers) */
+const DEFAULT_BRANCH_PREFIXES: Record<string, string> = {
+  clickup: "CU-",
+  // linear: "LIN-",
+  // jira: "",  // Jira uses project keys like PROJ-123, handled by the adapter
+};
 
 function expandTilde(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -196,6 +205,10 @@ export function resolveConfig(projectName?: string): ResolvedConfig {
   const trackerType = (rawTracker.type as string) ?? "headless";
   const issueTracker: IssueTrackerConfig = {
     type: trackerType as "clickup" | "headless",
+    // Branch prefix: explicit config > type default > none
+    branchPrefix: (rawTracker.branchPrefix as string | undefined)
+      ?? DEFAULT_BRANCH_PREFIXES[trackerType]
+      ?? undefined,
     // Pass through the adapter-specific sub-object
     ...(rawTracker[trackerType] && typeof rawTracker[trackerType] === "object"
       ? { [trackerType]: rawTracker[trackerType] }
