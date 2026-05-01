@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.1](https://github.com/fabkho/pi-multifix/compare/pi-multifix-0.2.0...pi-multifix-0.2.1) (2026-05-01)
+
+
+### Features
+
+* defer ClickUp comment until MR is merged ([6e4dc85](https://github.com/fabkho/pi-multifix/commit/6e4dc859a3831394ab4d681040e56d5982bcb511))
+* defer ClickUp comment until MR is merged ([77c89d0](https://github.com/fabkho/pi-multifix/commit/77c89d001911b6a7f5c510be474ec127e68ce8c0))
+
+
+### Bug Fixes
+
+* address CodeRabbit review comments ([f806ee0](https://github.com/fabkho/pi-multifix/commit/f806ee02917781281a34184f1d71c5636f6f9b72))
+
 ## [0.2.0](https://github.com/fabkho/pi-multifix/compare/pi-multifix-0.1.0...pi-multifix-0.2.0) (2026-04-28)
 
 

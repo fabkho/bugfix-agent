@@ -1,6 +1,6 @@
 {
   "name": "pi-multifix",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Pi extension for multi-repo bugfixing — ClickUp to MR in one command",
   "keywords": [
