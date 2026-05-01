@@ -82,6 +82,29 @@ export function registerCreateMrTool(
         body += `\n\n---\nRelated: ${bug.url}`;
       }
 
+      // ── Pre-commit checks ─────────────────────────────────────
+      const checks = repoConfig.preCommitChecks ?? [];
+      for (const check of checks) {
+        const cmdParts = check.cmd.trim().split(/\s+/);
+        const checkArgs = [...cmdParts.slice(1), ...(check.args ?? [])];
+        const failOnError = check.failOnError !== false;
+
+        const checkResult = await pi.exec(cmdParts[0], checkArgs, {
+          cwd: worktreePath,
+          signal,
+        });
+
+        const output = [checkResult.stdout, checkResult.stderr].filter(Boolean).join("\n").trim();
+
+        if (checkResult.code !== 0) {
+          if (failOnError) {
+            throw new Error(
+              `Pre-commit check failed: ${check.cmd}\n\n${output}`
+            );
+          }
+        }
+      }
+
       // Stage all changes
       const addResult = await pi.exec("git", ["add", "-A"], {
         cwd: worktreePath,

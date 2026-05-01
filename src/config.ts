@@ -5,6 +5,15 @@ import { parse as parseYaml } from "yaml";
 
 // ── Interfaces ───────────────────────────────────────────────────────
 
+export interface PreCommitCheck {
+  /** Shell command to run (e.g. "./vendor/bin/pint") */
+  cmd: string;
+  /** Extra arguments appended to cmd */
+  args?: string[];
+  /** Block the commit if this check exits non-zero. Default: true */
+  failOnError?: boolean;
+}
+
 export interface RepoConfig {
   name: string;
   path: string;
@@ -13,6 +22,8 @@ export interface RepoConfig {
   contextFile?: string;
   contextFiles?: string[];
   platform: "gitlab" | "github";
+  /** Commands to run in the worktree before git add / commit */
+  preCommitChecks?: PreCommitCheck[];
 }
 
 export interface WorkspaceConfig {
@@ -196,6 +207,15 @@ export function resolveConfig(projectName?: string): ResolvedConfig {
       if (parts.length > 0) {
         repoConfig.contextContent = parts.join("\n\n---\n\n");
       }
+    }
+
+    // Pre-commit checks
+    if (Array.isArray(repo.preCommitChecks)) {
+      repoConfig.preCommitChecks = (repo.preCommitChecks as Array<Record<string, unknown>>).map((c) => ({
+        cmd: c.cmd as string,
+        args: Array.isArray(c.args) ? (c.args as string[]) : undefined,
+        failOnError: c.failOnError !== false,
+      }));
     }
 
     resolvedRepos[repoKey] = repoConfig;

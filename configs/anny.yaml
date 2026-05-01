@@ -16,6 +16,10 @@ repos:
     contextFiles:
       - .github/copilot-instructions.md
       - AGENTS.md
+    preCommitChecks:
+      - cmd: ./vendor/bin/pint
+      - cmd: ./vendor/bin/phpstan
+        args: [analyse, --memory-limit=2G]
 
 workspace:
   root: ~/code/anny/worktrees

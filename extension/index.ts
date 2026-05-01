@@ -11,6 +11,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { resolveConfig, type ResolvedConfig } from "../src/config.js";
 import {
   createAdapter,
@@ -102,6 +103,7 @@ export default function (pi: ExtensionAPI) {
     state = null;
     if (ctx.hasUI) {
       ctx.ui.setStatus("multifix", undefined);
+      ctx.ui.setWidget("multifix-state", undefined);
     }
   });
 
@@ -117,15 +119,12 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
-  // ── Status line helper ─────────────────────────────────────────
+  // ── Status line + widget helpers ─────────────────────────────────
   function updateStatusLine(ctx: { hasUI: boolean; ui: any }) {
     if (!ctx.hasUI || !state) return;
     const theme = ctx.ui.theme;
 
-    const bugLabel = !state.bug.id.startsWith("headless")
-      ? `${state.bug.id}`
-      : "headless";
-
+    const taskLabel = !state.bug.id.startsWith("headless") ? state.bug.id : "headless";
     const repos = Object.keys(state.workspacePaths).join(", ");
     const mrCount = Object.keys(state.createdMrs).length;
     const mrPart = mrCount > 0
@@ -135,10 +134,38 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setStatus(
       "multifix",
       theme.fg("accent", "🔧 ") +
-      theme.fg("dim", bugLabel) +
+      theme.fg("dim", taskLabel) +
       theme.fg("muted", ` | ${repos}`) +
       mrPart,
     );
+
+    // Widget: one persistent line above the editor
+    ctx.ui.setWidget("multifix-state", (_tui: any, theme: any) => ({
+      render(width: number): string[] {
+        if (!state) return [];
+        const id = !state.bug.id.startsWith("headless") ? state.bug.id + " " : "";
+        const title = state.bug.title.slice(0, 45);
+        const repoParts = Object.entries(state.workspacePaths).map(([key]) =>
+          state!.createdMrs[key]
+            ? theme.fg("success", `${key} ✓`)
+            : theme.fg("muted", key)
+        );
+        const total = Object.keys(state.workspacePaths).length;
+        const done = Object.keys(state.createdMrs).length;
+        const left =
+          theme.fg("accent", "🔧 ") +
+          theme.fg("warning", id) +
+          theme.fg("text", title);
+        const right =
+          repoParts.join(theme.fg("dim", " · ")) +
+          theme.fg("dim", "  MRs: ") +
+          theme.fg(done > 0 ? "success" : "muted", `${done}/${total}`) +
+          " ";
+        const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
+        return [truncateToWidth(left + pad + right, width, "")];
+      },
+      invalidate() {},
+    }), { placement: "belowEditor" });
   }
 
   // ── Persist state helper ───────────────────────────────────────
@@ -234,7 +261,7 @@ export default function (pi: ExtensionAPI) {
         const repoInstruction = buildRepoInstruction(parsed.repoHint, config);
 
         pi.sendUserMessage(
-          `# Bug Fix Task\n\n` +
+          `# Task\n\n` +
             `**${bug.title}** (${bug.id})\n` +
             (bug.url ? `${bug.url}\n\n` : "\n") +
             `${bug.description}\n\n` +
@@ -246,7 +273,7 @@ export default function (pi: ExtensionAPI) {
               : "") +
             `${repoInstruction}\n\n` +
             `## Instructions\n` +
-            `Analyze this bug, fix it, then use \`create_mr\` for each repo with changes and \`update_issue\` to post MR links back.`,
+            `Analyze the task, implement the changes, then use \`create_mr\` for each repo with changes and \`update_issue\` to post MR links back.`,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -397,6 +424,7 @@ export default function (pi: ExtensionAPI) {
       if (ctx.hasUI) {
         const theme = ctx.ui.theme;
         ctx.ui.setStatus("multifix", theme.fg("success", "✓ ") + theme.fg("dim", "multifix done"));
+        ctx.ui.setWidget("multifix-state", undefined);
       }
 
       ctx.ui.notify(results.join("\n"), "info");
