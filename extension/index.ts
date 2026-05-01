@@ -15,7 +15,7 @@ import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { resolveConfig, type ResolvedConfig } from "../src/config.js";
 import {
   createAdapter,
-  type Bug,
+  type Task,
   type IssueAdapter,
 } from "../src/adapters/index.js";
 import { HeadlessAdapter } from "../src/adapters/headless.js";
@@ -24,15 +24,15 @@ import { renderPrompt } from "../src/prompt.js";
 import {
   registerCreateMrTool,
   registerUpdateIssueTool,
-  type BugfixState,
+  type TaskState,
 } from "../src/tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Serializable subset of BugfixState for session persistence */
+/** Serializable subset of TaskState for session persistence */
 interface PersistedState {
   projectName: string;
-  bug: Bug;
+  task: Task;
   trackerType: string;
   trackerConfig: Record<string, unknown>;
   workspacePaths: Record<string, string>;
@@ -43,7 +43,7 @@ interface PersistedState {
 
 export default function (pi: ExtensionAPI) {
   // ── Session state ──────────────────────────────────────────────
-  let state: BugfixState | null = null;
+  let state: TaskState | null = null;
   let pendingSystemPrompt: string | null = null;
 
   const getState = () => state;
@@ -70,9 +70,9 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     state = null;
 
-    // Scan current branch entries for persisted bugfix state
+    // Scan current branch entries for persisted task state
     for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type === "custom" && entry.customType === "bugfix-state") {
+      if (entry.type === "custom" && entry.customType === "multirepo-state-v2") {
         try {
           const persisted = entry.data as PersistedState;
           const config = resolveConfig(persisted.projectName);
@@ -80,7 +80,7 @@ export default function (pi: ExtensionAPI) {
 
           state = {
             config,
-            bug: persisted.bug,
+            task: persisted.task,
             adapter,
             workspacePaths: persisted.workspacePaths,
             createdMrs: persisted.createdMrs,
@@ -124,7 +124,7 @@ export default function (pi: ExtensionAPI) {
     if (!ctx.hasUI || !state) return;
     const theme = ctx.ui.theme;
 
-    const taskLabel = !state.bug.id.startsWith("headless") ? state.bug.id : "headless";
+    const taskLabel = !state.task.id.startsWith("headless") ? state.task.id : "headless";
     const repos = Object.keys(state.workspacePaths).join(", ");
     const mrCount = Object.keys(state.createdMrs).length;
     const mrPart = mrCount > 0
@@ -143,8 +143,8 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setWidget("multirepo-state", (_tui: any, theme: any) => ({
       render(width: number): string[] {
         if (!state) return [];
-        const id = !state.bug.id.startsWith("headless") ? state.bug.id + " " : "";
-        const title = state.bug.title.slice(0, 45);
+        const id = !state.task.id.startsWith("headless") ? state.task.id + " " : "";
+        const title = state.task.title.slice(0, 45);
         const repoParts = Object.entries(state.workspacePaths).map(([key]) =>
           state!.createdMrs[key]
             ? theme.fg("success", `${key} ✓`)
@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
     if (!state) return;
     const persisted: PersistedState = {
       projectName: state.config.name,
-      bug: state.bug,
+      task: state.task,
       trackerType: state.config.issueTracker.type,
       trackerConfig: state.config.issueTracker as unknown as Record<string, unknown>,
       workspacePaths: state.workspacePaths,
@@ -181,13 +181,13 @@ export default function (pi: ExtensionAPI) {
       pendingComment: state.pendingComment,
       pendingStatus: state.pendingStatus,
     };
-    pi.appendEntry("bugfix-state", persisted);
+    pi.appendEntry("multirepo-state-v2", persisted);
   }
 
   // ── /multirepo command ────────────────────────────────────────────
   pi.registerCommand("multirepo", {
     description:
-      "Fix a bug across repos. Usage:\n" +
+      "Work on a task across repos. Usage:\n" +
       "  /multirepo CU-12345\n" +
       "  /multirepo CU-12345 repo=frontend \"Extra context\"\n" +
       '  /multirepo "The booking modal crashes on save"\n' +
@@ -212,16 +212,16 @@ export default function (pi: ExtensionAPI) {
 
         // ── 2. Create adapter + fetch issue ──────────────────────
         let adapter: IssueAdapter;
-        let bug: Bug;
+        let task: Task;
 
         if (parsed.isHeadless) {
           adapter = new HeadlessAdapter();
-          bug = await adapter.fetchIssue(parsed.taskRef);
+          task = await adapter.fetchIssue(parsed.taskRef);
         } else {
           adapter = createAdapter(config.issueTracker);
           ctx.ui.notify(`Fetching issue ${parsed.taskRef}...`, "info");
-          bug = await adapter.fetchIssue(parsed.taskRef);
-          ctx.ui.notify(`Bug: ${bug.title}`, "info");
+          task = await adapter.fetchIssue(parsed.taskRef);
+          ctx.ui.notify(`Task: ${task.title}`, "info");
         }
 
         // ── 3. Create workspace ──────────────────────────────────
@@ -229,8 +229,8 @@ export default function (pi: ExtensionAPI) {
         const workspacePaths = await createWorkspace(
           config,
           exec,
-          parsed.isHeadless ? undefined : bug.id,
-          bug.title,
+          parsed.isHeadless ? undefined : task.id,
+          task.title,
         );
 
         const pathSummary = Object.entries(workspacePaths)
@@ -239,12 +239,12 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`Workspace ready:\n${pathSummary}`, "info");
 
         // ── 4. Store session state ───────────────────────────────
-        state = { config, bug, adapter, workspacePaths, createdMrs: {}, pendingComment: null, pendingStatus: null };
+        state = { config, task, adapter, workspacePaths, createdMrs: {}, pendingComment: null, pendingStatus: null };
 
         // ── 5. Name the session + status line ────────────────────
-        const sessionLabel = !bug.id.startsWith("headless")
-          ? `${bug.id}: ${bug.title.slice(0, 60)}`
-          : bug.title.slice(0, 60);
+        const sessionLabel = !task.id.startsWith("headless")
+          ? `${task.id}: ${task.title.slice(0, 60)}`
+          : task.title.slice(0, 60);
         pi.setSessionName(`🔧 ${sessionLabel}`);
         updateStatusLine(ctx);
 
@@ -252,7 +252,7 @@ export default function (pi: ExtensionAPI) {
         persistState();
 
         // ── 7. Render system prompt ──────────────────────────────
-        pendingSystemPrompt = renderPrompt(config, bug, workspacePaths, {
+        pendingSystemPrompt = renderPrompt(config, task, workspacePaths, {
           repoHint: parsed.repoHint,
           extraContext: parsed.extraContext,
         });
@@ -262,11 +262,11 @@ export default function (pi: ExtensionAPI) {
 
         pi.sendUserMessage(
           `# Task\n\n` +
-            `**${bug.title}** (${bug.id})\n` +
-            (bug.url ? `${bug.url}\n\n` : "\n") +
-            `${bug.description}\n\n` +
-            (bug.comments.length > 0
-              ? `## Comments\n${bug.comments.map((c) => `- ${c}`).join("\n")}\n\n`
+            `**${task.title}** (${task.id})\n` +
+            (task.url ? `${task.url}\n\n` : "\n") +
+            `${task.description}\n\n` +
+            (task.comments.length > 0
+              ? `## Comments\n${task.comments.map((c) => `- ${c}`).join("\n")}\n\n`
               : "") +
             (parsed.extraContext
               ? `## Additional Context\n${parsed.extraContext}\n\n`
@@ -294,7 +294,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      const { config, bug, adapter, createdMrs } = state;
+      const { config, task, adapter, createdMrs } = state;
 
       if (Object.keys(createdMrs).length === 0) {
         ctx.ui.notify("No MRs were created in this session — nothing to merge.", "warning");
@@ -385,22 +385,22 @@ export default function (pi: ExtensionAPI) {
         for (const hook of hooks) {
           try {
             if (hook.type === "clickup-comment") {
-              if (!bug.url || config.issueTracker.type === "headless") continue;
+              if (!task.url || config.issueTracker.type === "headless") continue;
               const fullComment = [
                 state.pendingComment,
                 userComment ? `\n${userComment}` : null,
               ].filter(Boolean).join("").trim();
 
               if (fullComment) {
-                await adapter.addComment(bug.id, `✅ Merged.\n\n${fullComment}`);
+                await adapter.addComment(task.id, `✅ Merged.\n\n${fullComment}`);
                 state.pendingComment = null;
                 results.push(`Hook: ✓ ClickUp comment posted`);
               }
             } else if (hook.type === "clickup-status") {
-              if (!bug.url || config.issueTracker.type === "headless") continue;
+              if (!task.url || config.issueTracker.type === "headless") continue;
               const status = state.pendingStatus ?? hook.status;
               if (status) {
-                await adapter.updateStatus(bug.id, status);
+                await adapter.updateStatus(task.id, status);
                 state.pendingStatus = null;
                 results.push(`Hook: ✓ ClickUp status → ${status}`);
               }
@@ -543,7 +543,7 @@ function buildRepoInstruction(
   if (!repoHint) {
     return (
       "## Repo Routing\n" +
-      "No repo was specified. Analyze the bug to determine which repo(s) are affected. " +
+      "No repo was specified. Analyze the task to determine which repo(s) are affected. " +
       "Use the `Agent` tool with `subagent_type: \"Explore\"` to scout both repos if needed."
     );
   }
@@ -553,7 +553,7 @@ function buildRepoInstruction(
 
   return (
     `## Repo Routing\n` +
-    `The user specified **repo=${repoHint}**. The bug is known to be in this repo — focus your fix there.\n` +
+    `The user specified **repo=${repoHint}**. The task is known to be in this repo — focus your fix there.\n` +
     (otherRepos.length > 0
       ? `Also check ${otherRepos.map((r) => `**${r}**`).join(", ")} for secondary impact.`
       : "")

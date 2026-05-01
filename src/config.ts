@@ -56,7 +56,7 @@ export interface IssueTrackerConfig {
   type: "clickup" | "headless";
   /** Prefix for branch names (e.g., "CU-" for ClickUp, "LIN-" for Linear). Default: none */
   branchPrefix?: string;
-  /** Status to set when /multifix-done runs (e.g., "code review", "done"). Default: none (skip status update) */
+  /** Status to set when /multirepo-merge runs (e.g., "code review", "done"). Default: none (skip status update) */
   doneStatus?: string;
   /** Adapter-specific config — keyed by type name */
   [adapterType: string]: unknown;
@@ -92,7 +92,7 @@ export interface ResolvedConfig extends Omit<ProjectConfig, "repos"> {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const CONFIG_DIR = join(homedir(), ".config", "pi-multifix");
+const CONFIG_DIR = join(homedir(), ".config", "pi-multirepo");
 
 /** Default branch prefixes per tracker type (for automation triggers) */
 const DEFAULT_BRANCH_PREFIXES: Record<string, string> = {
@@ -121,7 +121,7 @@ function readFileSafe(path: string): string | undefined {
 function resolveProjectName(explicit?: string): string {
   if (explicit) return explicit;
 
-  const fromEnv = process.env.MULTIFIX_PROJECT;
+  const fromEnv = process.env.MULTIREPO_PROJECT;
   if (fromEnv) return fromEnv;
 
   const defaultFile = join(CONFIG_DIR, "default");
@@ -129,7 +129,7 @@ function resolveProjectName(explicit?: string): string {
   if (fromFile) return fromFile;
 
   throw new Error(
-    "No project name provided. Pass it explicitly, set MULTIFIX_PROJECT, " +
+    "No project name provided. Pass it explicitly, set MULTIREPO_PROJECT, " +
       `or create ${defaultFile} with the default project name.`,
   );
 }

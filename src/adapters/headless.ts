@@ -1,7 +1,7 @@
-import type { Bug, IssueAdapter } from './types.js'
+import type { Task, IssueAdapter } from './types.js'
 
 export class HeadlessAdapter implements IssueAdapter {
-  async fetchIssue(text: string): Promise<Bug> {
+  async fetchIssue(text: string): Promise<Task> {
     return {
       id: `headless-${Date.now()}`,
       title: text.slice(0, 80),

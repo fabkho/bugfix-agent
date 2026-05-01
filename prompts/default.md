@@ -10,17 +10,17 @@ You are an automated agent working across multiple repositories. Your job is to 
 
 ## Task
 
-**ID:** {{bug.id}}
-**Title:** {{bug.title}}
-**URL:** {{bug.url}}
+**ID:** {{task.id}}
+**Title:** {{task.title}}
+**URL:** {{task.url}}
 
 ### Description
 
-{{bug.description}}
+{{task.description}}
 
 ### Comments
 
-{{bug.comments}}
+{{task.comments}}
 
 ## Repo Hint
 

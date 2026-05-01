@@ -25,7 +25,7 @@ export function slugify(text: string): string {
 
 export function buildBranchSlug(taskId?: string, title?: string, branchPrefix?: string): string {
   if (taskId) {
-    const slug = slugify(title || "bugfix");
+    const slug = slugify(title || "task");
     if (branchPrefix) {
       // Ensure the ID has the prefix (e.g., CU-abc123)
       const prefixedId = taskId.startsWith(branchPrefix) ? taskId : `${branchPrefix}${taskId}`;
@@ -33,7 +33,7 @@ export function buildBranchSlug(taskId?: string, title?: string, branchPrefix?: 
     }
     return `fix/${taskId}_${slug}`;
   }
-  const slug = slugify(title || `bugfix-${Date.now()}`);
+  const slug = slugify(title || `task-${Date.now()}`);
   return `fix/${slug}`;
 }
 
@@ -98,7 +98,7 @@ export async function createWorkspace(
   if (existing) return existing;
 
   if (taskId && branchPrefix) {
-    const prefixedSlug = `${branchPrefix}${taskId}_${slugify(title || "bugfix")}`;
+    const prefixedSlug = `${branchPrefix}${taskId}_${slugify(title || "task")}`;
     const existing2 = detectExistingWorkspace(config, prefixedSlug);
     if (existing2) return existing2;
   }
@@ -111,10 +111,10 @@ export async function createWorkspace(
     }
 
     const scriptArg = taskId && branchPrefix
-      ? `${branchPrefix}${taskId}_${slugify(title || "bugfix")}`
+      ? `${branchPrefix}${taskId}_${slugify(title || "task")}`
       : taskId
-        ? `${taskId}_${slugify(title || "bugfix")}`
-        : slugify(title || `bugfix-${Date.now()}`);
+        ? `${taskId}_${slugify(title || "task")}`
+        : slugify(title || `task-${Date.now()}`);
 
     const result = await exec(script, [scriptArg], { timeout: 30000 });
     if (result.code !== 0) {

@@ -1,4 +1,4 @@
-export interface Bug {
+export interface Task {
   id: string
   title: string
   description: string
@@ -9,7 +9,7 @@ export interface Bug {
 }
 
 export interface IssueAdapter {
-  fetchIssue(id: string): Promise<Bug>
+  fetchIssue(id: string): Promise<Task>
   addComment(id: string, comment: string): Promise<void>
   updateStatus(id: string, status: string): Promise<void>
 }
