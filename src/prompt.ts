@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "./config.js";
-import type { Bug } from "./adapters/types.js";
+import type { Task } from "./adapters/types.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ export function loadTemplate(templatePath?: string): string {
 // ── Render ───────────────────────────────────────────────────────────
 
 /**
- * Render the system prompt for a bugfix agent session.
+ * Render the system prompt for a multirepo agent session.
  *
  * Loads the markdown template (custom or default), substitutes all
  * `{{variable}}` placeholders, and conditionally includes/excludes
@@ -31,7 +31,7 @@ export function loadTemplate(templatePath?: string): string {
  */
 export function renderPrompt(
   config: ResolvedConfig,
-  bug: Bug,
+  task: Task,
   workspacePaths: Record<string, string>,
   options?: { repoHint?: string; extraContext?: string },
 ): string {
@@ -60,19 +60,19 @@ export function renderPrompt(
     .join("\n\n---\n\n");
 
   const commentsBlock =
-    bug.comments.length > 0
-      ? bug.comments.map((c) => `- ${c}`).join("\n")
+    task.comments.length > 0
+      ? task.comments.map((c) => `- ${c}`).join("\n")
       : "_No comments._";
 
   // ── Variable map ────────────────────────────────────────────────
 
   const vars: Record<string, string> = {
     "project.name": config.name,
-    "bug.id": bug.id,
-    "bug.title": bug.title,
-    "bug.description": bug.description,
-    "bug.comments": commentsBlock,
-    "bug.url": bug.url,
+    "task.id": task.id,
+    "task.title": task.title,
+    "task.description": task.description,
+    "task.comments": commentsBlock,
+    "task.url": task.url,
     repo_hint: options?.repoHint ?? "",
     extra_context: options?.extraContext ?? "",
     repos_overview: reposOverview,

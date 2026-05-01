@@ -1,9 +1,9 @@
 /**
- * pi-multifix — Pi extension for multi-repo fixing.
+ * pi-multirepo — Pi extension for multi-repo tasks.
  *
  * Registers:
- *   /multifix <task-id|text> [repo=<name>] [--project <name>] [extra context...]
- *   /multifix-done [comment] — merge MRs, update tracker
+ *   /multirepo <task-id|text> [repo=<name>] [--project <name>] [extra context...]
+ *   /multirepo-merge [comment] — merge MRs, update tracker
  *   create_mr tool
  *   update_issue tool
  */
@@ -11,10 +11,11 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { resolveConfig, type ResolvedConfig } from "../src/config.js";
 import {
   createAdapter,
-  type Bug,
+  type Task,
   type IssueAdapter,
 } from "../src/adapters/index.js";
 import { HeadlessAdapter } from "../src/adapters/headless.js";
@@ -23,15 +24,15 @@ import { renderPrompt } from "../src/prompt.js";
 import {
   registerCreateMrTool,
   registerUpdateIssueTool,
-  type BugfixState,
+  type TaskState,
 } from "../src/tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Serializable subset of BugfixState for session persistence */
+/** Serializable subset of TaskState for session persistence */
 interface PersistedState {
   projectName: string;
-  bug: Bug;
+  task: Task;
   trackerType: string;
   trackerConfig: Record<string, unknown>;
   workspacePaths: Record<string, string>;
@@ -42,7 +43,7 @@ interface PersistedState {
 
 export default function (pi: ExtensionAPI) {
   // ── Session state ──────────────────────────────────────────────
-  let state: BugfixState | null = null;
+  let state: TaskState | null = null;
   let pendingSystemPrompt: string | null = null;
 
   const getState = () => state;
@@ -69,9 +70,9 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     state = null;
 
-    // Scan current branch entries for persisted bugfix state
+    // Scan current branch entries for persisted task state
     for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type === "custom" && entry.customType === "bugfix-state") {
+      if (entry.type === "custom" && entry.customType === "multirepo-state-v2") {
         try {
           const persisted = entry.data as PersistedState;
           const config = resolveConfig(persisted.projectName);
@@ -79,7 +80,7 @@ export default function (pi: ExtensionAPI) {
 
           state = {
             config,
-            bug: persisted.bug,
+            task: persisted.task,
             adapter,
             workspacePaths: persisted.workspacePaths,
             createdMrs: persisted.createdMrs,
@@ -101,7 +102,8 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async (_event, ctx) => {
     state = null;
     if (ctx.hasUI) {
-      ctx.ui.setStatus("multifix", undefined);
+      ctx.ui.setStatus("multirepo", undefined);
+      ctx.ui.setWidget("multirepo-state", undefined);
     }
   });
 
@@ -117,15 +119,12 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
-  // ── Status line helper ─────────────────────────────────────────
+  // ── Status line + widget helpers ─────────────────────────────────
   function updateStatusLine(ctx: { hasUI: boolean; ui: any }) {
     if (!ctx.hasUI || !state) return;
     const theme = ctx.ui.theme;
 
-    const bugLabel = !state.bug.id.startsWith("headless")
-      ? `${state.bug.id}`
-      : "headless";
-
+    const taskLabel = !state.task.id.startsWith("headless") ? state.task.id : "headless";
     const repos = Object.keys(state.workspacePaths).join(", ");
     const mrCount = Object.keys(state.createdMrs).length;
     const mrPart = mrCount > 0
@@ -133,12 +132,40 @@ export default function (pi: ExtensionAPI) {
       : "";
 
     ctx.ui.setStatus(
-      "multifix",
+      "multirepo",
       theme.fg("accent", "🔧 ") +
-      theme.fg("dim", bugLabel) +
+      theme.fg("dim", taskLabel) +
       theme.fg("muted", ` | ${repos}`) +
       mrPart,
     );
+
+    // Widget: one persistent line above the editor
+    ctx.ui.setWidget("multirepo-state", (_tui: any, theme: any) => ({
+      render(width: number): string[] {
+        if (!state) return [];
+        const id = !state.task.id.startsWith("headless") ? state.task.id + " " : "";
+        const title = state.task.title.slice(0, 45);
+        const repoParts = Object.entries(state.workspacePaths).map(([key]) =>
+          state!.createdMrs[key]
+            ? theme.fg("success", `${key} ✓`)
+            : theme.fg("muted", key)
+        );
+        const total = Object.keys(state.workspacePaths).length;
+        const done = Object.keys(state.createdMrs).length;
+        const left =
+          theme.fg("accent", "🔧 ") +
+          theme.fg("warning", id) +
+          theme.fg("text", title);
+        const right =
+          repoParts.join(theme.fg("dim", " · ")) +
+          theme.fg("dim", "  MRs: ") +
+          theme.fg(done > 0 ? "success" : "muted", `${done}/${total}`) +
+          " ";
+        const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
+        return [truncateToWidth(left + pad + right, width, "")];
+      },
+      invalidate() {},
+    }), { placement: "belowEditor" });
   }
 
   // ── Persist state helper ───────────────────────────────────────
@@ -146,7 +173,7 @@ export default function (pi: ExtensionAPI) {
     if (!state) return;
     const persisted: PersistedState = {
       projectName: state.config.name,
-      bug: state.bug,
+      task: state.task,
       trackerType: state.config.issueTracker.type,
       trackerConfig: state.config.issueTracker as unknown as Record<string, unknown>,
       workspacePaths: state.workspacePaths,
@@ -154,21 +181,21 @@ export default function (pi: ExtensionAPI) {
       pendingComment: state.pendingComment,
       pendingStatus: state.pendingStatus,
     };
-    pi.appendEntry("bugfix-state", persisted);
+    pi.appendEntry("multirepo-state-v2", persisted);
   }
 
-  // ── /multifix command ────────────────────────────────────────────
-  pi.registerCommand("multifix", {
+  // ── /multirepo command ────────────────────────────────────────────
+  pi.registerCommand("multirepo", {
     description:
-      "Fix a bug across repos. Usage:\n" +
-      "  /multifix CU-12345\n" +
-      "  /multifix CU-12345 repo=frontend \"Extra context\"\n" +
-      '  /multifix "The booking modal crashes on save"\n' +
-      "  /multifix --project other CU-99999",
+      "Work on a task across repos. Usage:\n" +
+      "  /multirepo CU-12345\n" +
+      "  /multirepo CU-12345 repo=frontend \"Extra context\"\n" +
+      '  /multirepo "The booking modal crashes on save"\n' +
+      "  /multirepo --project other CU-99999",
     handler: async (args, ctx) => {
       if (!args?.trim()) {
         ctx.ui.notify(
-          "Usage: /multifix <task-id|URL|text> [repo=<name>] [--project <name>] [context...]",
+          "Usage: /multirepo <task-id|URL|text> [repo=<name>] [--project <name>] [context...]",
           "warning",
         );
         return;
@@ -185,16 +212,16 @@ export default function (pi: ExtensionAPI) {
 
         // ── 2. Create adapter + fetch issue ──────────────────────
         let adapter: IssueAdapter;
-        let bug: Bug;
+        let task: Task;
 
         if (parsed.isHeadless) {
           adapter = new HeadlessAdapter();
-          bug = await adapter.fetchIssue(parsed.taskRef);
+          task = await adapter.fetchIssue(parsed.taskRef);
         } else {
           adapter = createAdapter(config.issueTracker);
           ctx.ui.notify(`Fetching issue ${parsed.taskRef}...`, "info");
-          bug = await adapter.fetchIssue(parsed.taskRef);
-          ctx.ui.notify(`Bug: ${bug.title}`, "info");
+          task = await adapter.fetchIssue(parsed.taskRef);
+          ctx.ui.notify(`Task: ${task.title}`, "info");
         }
 
         // ── 3. Create workspace ──────────────────────────────────
@@ -202,8 +229,8 @@ export default function (pi: ExtensionAPI) {
         const workspacePaths = await createWorkspace(
           config,
           exec,
-          parsed.isHeadless ? undefined : bug.id,
-          bug.title,
+          parsed.isHeadless ? undefined : task.id,
+          task.title,
         );
 
         const pathSummary = Object.entries(workspacePaths)
@@ -212,12 +239,12 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`Workspace ready:\n${pathSummary}`, "info");
 
         // ── 4. Store session state ───────────────────────────────
-        state = { config, bug, adapter, workspacePaths, createdMrs: {}, pendingComment: null, pendingStatus: null };
+        state = { config, task, adapter, workspacePaths, createdMrs: {}, pendingComment: null, pendingStatus: null };
 
         // ── 5. Name the session + status line ────────────────────
-        const sessionLabel = !bug.id.startsWith("headless")
-          ? `${bug.id}: ${bug.title.slice(0, 60)}`
-          : bug.title.slice(0, 60);
+        const sessionLabel = !task.id.startsWith("headless")
+          ? `${task.id}: ${task.title.slice(0, 60)}`
+          : task.title.slice(0, 60);
         pi.setSessionName(`🔧 ${sessionLabel}`);
         updateStatusLine(ctx);
 
@@ -225,7 +252,7 @@ export default function (pi: ExtensionAPI) {
         persistState();
 
         // ── 7. Render system prompt ──────────────────────────────
-        pendingSystemPrompt = renderPrompt(config, bug, workspacePaths, {
+        pendingSystemPrompt = renderPrompt(config, task, workspacePaths, {
           repoHint: parsed.repoHint,
           extraContext: parsed.extraContext,
         });
@@ -234,40 +261,40 @@ export default function (pi: ExtensionAPI) {
         const repoInstruction = buildRepoInstruction(parsed.repoHint, config);
 
         pi.sendUserMessage(
-          `# Bug Fix Task\n\n` +
-            `**${bug.title}** (${bug.id})\n` +
-            (bug.url ? `${bug.url}\n\n` : "\n") +
-            `${bug.description}\n\n` +
-            (bug.comments.length > 0
-              ? `## Comments\n${bug.comments.map((c) => `- ${c}`).join("\n")}\n\n`
+          `# Task\n\n` +
+            `**${task.title}** (${task.id})\n` +
+            (task.url ? `${task.url}\n\n` : "\n") +
+            `${task.description}\n\n` +
+            (task.comments.length > 0
+              ? `## Comments\n${task.comments.map((c) => `- ${c}`).join("\n")}\n\n`
               : "") +
             (parsed.extraContext
               ? `## Additional Context\n${parsed.extraContext}\n\n`
               : "") +
             `${repoInstruction}\n\n` +
             `## Instructions\n` +
-            `Analyze this bug, fix it, then use \`create_mr\` for each repo with changes and \`update_issue\` to post MR links back.`,
+            `Analyze the task, implement the changes, then use \`create_mr\` for each repo with changes and \`update_issue\` to post MR links back.`,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        ctx.ui.notify(`/multifix error: ${msg}`, "error");
+        ctx.ui.notify(`/multirepo error: ${msg}`, "error");
       }
     },
   });
 
-  // ── /multifix-done command ───────────────────────────────────────
-  pi.registerCommand("multifix-done", {
+  // ── /multirepo-merge command ───────────────────────────────────────
+  pi.registerCommand("multirepo-merge", {
     description:
       "Merge MR(s), update issue tracker, and optionally leave a comment.\n" +
-      "  /multifix-done\n" +
-      '  /multifix-done "Went with the simple fix, no backend needed"',
+      "  /multirepo-merge\n" +
+      '  /multirepo-merge "Went with the simple fix, no backend needed"',
     handler: async (args, ctx) => {
       if (!state) {
-        ctx.ui.notify("No active multifix session. Run /multifix first.", "error");
+        ctx.ui.notify("No active multirepo session. Run /multirepo first.", "error");
         return;
       }
 
-      const { config, bug, adapter, createdMrs } = state;
+      const { config, task, adapter, createdMrs } = state;
 
       if (Object.keys(createdMrs).length === 0) {
         ctx.ui.notify("No MRs were created in this session — nothing to merge.", "warning");
@@ -348,55 +375,76 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
-      // ── Post buffered comment to issue tracker ────────────────────
-      if (bug.url && config.issueTracker.type !== "headless") {
-        if (!mergeSuccess) {
-          results.push(`Tracker: ⚠ Skipped — one or more merges failed`);
-        } else {
-          const pendingComment = state.pendingComment;
-          const pendingStatus = state.pendingStatus;
-          const userComment = args?.trim() || undefined;
+      // ── Run post-merge hooks ────────────────────────────────────────
+      let hooksSkipped = false;
+      if (!mergeSuccess) {
+        results.push(`Hooks: ⚠ Skipped — one or more merges failed`);
+        hooksSkipped = true;
+      } else {
+        const hooks = config.postMergeHooks ?? [];
+        const userComment = args?.trim() || undefined;
 
-          // Combine the buffered MR comment with any user-supplied note
-          const fullComment = [
-            pendingComment,
-            userComment ? `\n${userComment}` : null,
-          ]
-            .filter(Boolean)
-            .join("")
-            .trim();
+        for (const hook of hooks) {
+          try {
+            if (hook.type === "clickup-comment") {
+              if (!task.url || config.issueTracker.type === "headless") continue;
+              const fullComment = [
+                state.pendingComment,
+                userComment ? `\n${userComment}` : null,
+              ].filter(Boolean).join("").trim();
 
-          if (fullComment) {
-            try {
-              await adapter.addComment(bug.id, `✅ Fix merged.\n\n${fullComment}`);
-              state.pendingComment = null;
-              results.push(`Tracker: ✓ Comment posted`);
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              results.push(`Tracker: ✗ Failed to post comment — ${msg}`);
+              if (fullComment) {
+                await adapter.addComment(task.id, `✅ Merged.\n\n${fullComment}`);
+                state.pendingComment = null;
+                results.push(`Hook: ✓ ClickUp comment posted`);
+              }
+            } else if (hook.type === "clickup-status") {
+              if (!task.url || config.issueTracker.type === "headless") continue;
+              const status = state.pendingStatus ?? hook.status;
+              if (status) {
+                await adapter.updateStatus(task.id, status);
+                state.pendingStatus = null;
+                results.push(`Hook: ✓ ClickUp status → ${status}`);
+              }
+            } else {
+              // Shell hook — run through /bin/sh for pipes/&&/redirects
+              if (hook.cmd) {
+                const fullCmd = hook.args?.length
+                  ? `${hook.cmd} ${hook.args.join(" ")}`
+                  : hook.cmd;
+                const hookResult = await exec("/bin/sh", ["-c", fullCmd], { timeout: 30000 });
+                if (hookResult.code !== 0) {
+                  results.push(`Hook: ✗ ${hook.cmd} failed`);
+                  if (hook.failOnError !== false) {
+                    throw new Error(`Post-merge hook failed: ${hook.cmd}\n${hookResult.stderr || hookResult.stdout}`);
+                  }
+                } else {
+                  results.push(`Hook: ✓ ${hook.cmd}`);
+                }
+              }
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            results.push(`Hook: ✗ ${hook.type ?? hook.cmd} — ${msg}`);
+            if (hook.failOnError !== false) {
+              mergeSuccess = false;
+              break;
             }
           }
-
-          const doneStatus = pendingStatus ?? config.issueTracker.doneStatus;
-          if (doneStatus) {
-            try {
-              await adapter.updateStatus(bug.id, doneStatus);
-              state.pendingStatus = null;
-              results.push(`Tracker: ✓ Status → ${doneStatus}`);
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              results.push(`Tracker: ✗ Failed to update status — ${msg}`);
-            }
-          }
-
-          persistState();
         }
+
+        persistState();
       }
 
       // ── Update status line ─────────────────────────────────────
       if (ctx.hasUI) {
         const theme = ctx.ui.theme;
-        ctx.ui.setStatus("multifix", theme.fg("success", "✓ ") + theme.fg("dim", "multifix done"));
+        if (mergeSuccess && !hooksSkipped) {
+          ctx.ui.setStatus("multirepo", theme.fg("success", "✓ ") + theme.fg("dim", "multirepo done"));
+          ctx.ui.setWidget("multirepo-state", undefined);
+        } else {
+          ctx.ui.setStatus("multirepo", theme.fg("error", "✗ ") + theme.fg("dim", "merge incomplete — check results"));
+        }
       }
 
       ctx.ui.notify(results.join("\n"), "info");
@@ -418,7 +466,7 @@ export default function (pi: ExtensionAPI) {
 
     if (event.toolName === "update_issue") {
       // pendingComment/pendingStatus were already set by the tool execute;
-      // persist now so a reload before /multifix-done doesn't lose them
+      // persist now so a reload before /multirepo-merge doesn't lose them
       persistState();
     }
 
@@ -509,7 +557,7 @@ function buildRepoInstruction(
   if (!repoHint) {
     return (
       "## Repo Routing\n" +
-      "No repo was specified. Analyze the bug to determine which repo(s) are affected. " +
+      "No repo was specified. Analyze the task to determine which repo(s) are affected. " +
       "Use the `Agent` tool with `subagent_type: \"Explore\"` to scout both repos if needed."
     );
   }
@@ -519,7 +567,7 @@ function buildRepoInstruction(
 
   return (
     `## Repo Routing\n` +
-    `The user specified **repo=${repoHint}**. The bug is known to be in this repo — focus your fix there.\n` +
+    `The user specified **repo=${repoHint}**. The task is known to be in this repo — focus your fix there.\n` +
     (otherRepos.length > 0
       ? `Also check ${otherRepos.map((r) => `**${r}**`).join(", ")} for secondary impact.`
       : "")

@@ -1,4 +1,4 @@
-import type { Bug, IssueAdapter } from './types.js'
+import type { Task, IssueAdapter } from './types.js'
 
 const CLICKUP_API_BASE = 'https://api.clickup.com/api/v2'
 
@@ -65,7 +65,7 @@ export class ClickUpAdapter implements IssueAdapter {
     return trimmed
   }
 
-  async fetchIssue(rawId: string): Promise<Bug> {
+  async fetchIssue(rawId: string): Promise<Task> {
     const taskId = ClickUpAdapter.extractTaskId(rawId)
 
     const [task, commentsRes] = await Promise.all([

@@ -2,13 +2,13 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { Text } from "@mariozechner/pi-tui";
 import type { ResolvedConfig } from "./config.js";
-import type { Bug, IssueAdapter } from "./adapters/types.js";
+import type { Task, IssueAdapter } from "./adapters/types.js";
 
 // ── State interface ──────────────────────────────────────────────────
 
-export interface BugfixState {
+export interface TaskState {
   config: ResolvedConfig;
-  bug: Bug;
+  task: Task;
   adapter: IssueAdapter;
   workspacePaths: Record<string, string>;
   /** MR/PR URLs created during this session, keyed by repo name */
@@ -19,7 +19,7 @@ export interface BugfixState {
   pendingStatus: string | null;
 }
 
-export type StateGetter = () => BugfixState | null;
+export type StateGetter = () => TaskState | null;
 
 // ── Tool 1: create_mr ────────────────────────────────────────────────
 
@@ -50,10 +50,10 @@ export function registerCreateMrTool(
     async execute(toolCallId, params, signal) {
       const state = getState();
       if (!state) {
-        throw new Error("Multifix session not active — run /multifix first");
+        throw new Error("Multirepo session not active — run /multirepo first");
       }
 
-      const { config, bug, workspacePaths } = state;
+      const { config, task, workspacePaths } = state;
 
       // Look up repo config
       const repoConfig = config.repos[params.repo];
@@ -76,10 +76,33 @@ export function registerCreateMrTool(
       const baseBranch = params.base_branch ?? repoConfig.baseBranch;
       const platform = repoConfig.platform;
 
-      // Auto-append bug URL to body
+      // Auto-append task URL to body
       let body = params.body;
-      if (bug.url) {
-        body += `\n\n---\nRelated: ${bug.url}`;
+      if (task.url) {
+        body += `\n\n---\nRelated: ${task.url}`;
+      }
+
+      // ── Pre-commit checks ─────────────────────────────────────
+      const checks = repoConfig.preMRHooks ?? [];
+      for (const check of checks) {
+        const cmdParts = check.cmd.trim().split(/\s+/);
+        const checkArgs = [...cmdParts.slice(1), ...(check.args ?? [])];
+        const failOnError = check.failOnError !== false;
+
+        const checkResult = await pi.exec(cmdParts[0], checkArgs, {
+          cwd: worktreePath,
+          signal,
+        });
+
+        const output = [checkResult.stdout, checkResult.stderr].filter(Boolean).join("\n").trim();
+
+        if (checkResult.code !== 0) {
+          if (failOnError) {
+            throw new Error(
+              `Pre-commit check failed: ${check.cmd}\n\n${output}`
+            );
+          }
+        }
       }
 
       // Stage all changes
@@ -256,22 +279,22 @@ export function registerUpdateIssueTool(
     async execute(toolCallId, params) {
       const state = getState();
       if (!state) {
-        throw new Error("Multifix session not active — run /multifix first");
+        throw new Error("Multirepo session not active — run /multirepo first");
       }
 
-      const { bug } = state;
+      const { task } = state;
 
       // Headless mode: no real issue tracker
-      if (!bug.url || state.config.issueTracker.type === "headless") {
+      if (!task.url || state.config.issueTracker.type === "headless") {
         return {
           content: [
             { type: "text" as const, text: "No issue tracker — skipping update." },
           ],
-          details: { skipped: true as boolean, bugId: undefined as string | undefined, buffered: false as boolean },
+          details: { skipped: true as boolean, taskId: undefined as string | undefined, buffered: false as boolean },
         };
       }
 
-      // Buffer the comment and status — both will be posted to the tracker only after MRs are merged via /multifix-done
+      // Buffer the comment and status — both will be posted to the tracker only after MRs are merged via /multirepo-merge
       state.pendingComment = params.comment;
       state.pendingStatus = params.status ?? null;
 
@@ -282,10 +305,10 @@ export function registerUpdateIssueTool(
         content: [
           {
             type: "text" as const,
-            text: `Buffered ${buffered.join(" and ")} — will be posted to ${bug.url} after MRs are merged via /multifix-done.`,
+            text: `Buffered ${buffered.join(" and ")} — will be posted to ${task.url} after MRs are merged via /multirepo-merge.`,
           },
         ],
-        details: { skipped: false as boolean, bugId: bug.id as string | undefined, buffered: true as boolean },
+        details: { skipped: false as boolean, taskId: task.id as string | undefined, buffered: true as boolean },
       };
     },
 

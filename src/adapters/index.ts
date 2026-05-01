@@ -3,7 +3,7 @@ import type { IssueTrackerConfig } from '../config.js'
 import { ClickUpAdapter } from './clickup.js'
 import { HeadlessAdapter } from './headless.js'
 
-export { type Bug, type IssueAdapter } from './types.js'
+export { type Task, type IssueAdapter } from './types.js'
 export { ClickUpAdapter } from './clickup.js'
 export { HeadlessAdapter } from './headless.js'
 
